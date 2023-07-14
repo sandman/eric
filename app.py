@@ -2,6 +2,15 @@ import streamlit as st
 from dotenv import load_dotenv
 from pypdf import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
+from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
+from langchain.vectorstores import FAISS
+import yaml
+
+with open("config.yml") as parameters:
+    config = yaml.safe_load(parameters)
+
+embedding_config = config["embedding"]
+print(embedding_config)
 
 
 def get_pdf_text(pdf_docs):
@@ -19,6 +28,16 @@ def get_text_chunks(raw_text):
     )
     text_chunks = text_splitter.split_text(raw_text)
     return text_chunks
+
+
+def get_vectorstore(chunks):
+    if embedding_config == "openai":
+        embeddings = OpenAIEmbeddings()
+    if embedding_config == "instructor":
+        embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
+    vectorstore = FAISS.from_texts(texts=chunks, embedding=embeddings)
+
+    return vectorstore
 
 
 def main():
@@ -41,8 +60,9 @@ def main():
 
                 # Get text chunks and embeddings
                 text_chunks = get_text_chunks(raw_text)
-                st.write(text_chunks)
+
                 # Create vector store
+                vectorstore = get_vectorstore(text_chunks)
 
 
 if __name__ == "__main__":
