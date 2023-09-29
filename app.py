@@ -4,13 +4,18 @@ from pypdf import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
 from langchain.vectorstores import FAISS
+from langchain.chat_models import ChatOpenAI
+from langchain.memory import ConversationBufferMemory
+from langchain.chains import ConversationalRetrievalChain
+from langchain.llms import HuggingFaceHub
+from htmlTemplates import css, user_template, bot_template
 import yaml
 
 with open("config.yml") as parameters:
     config = yaml.safe_load(parameters)
 
 embedding_config = config["embedding"]
-print(embedding_config)
+model_config = config["model"]
 
 
 def get_pdf_text(pdf_docs):
@@ -40,13 +45,42 @@ def get_vectorstore(chunks):
     return vectorstore
 
 
+def handle_user_input(user_question):
+    response = st.session_state.conversation({"question": user_question})
+    st.write(response)
+
+
+def get_conversation_chain(vectorstore):
+    if model_config == "openai":
+        llms = ChatOpenAI()
+    elif model_config == "huggingface":
+        llms = HuggingFaceHub(
+            repo_id="google/flan-t5-xxl",
+            model_kwargs={"temperature": 0.5, "max_length": 512},
+        )
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    conversation_chain = ConversationalRetrievalChain.from_llm(
+        llm=llms, retriever=vectorstore.as_retriever(), memory=memory
+    )
+    return conversation_chain
+
+
 def main():
     load_dotenv()
     st.set_page_config(
         page_title="Eric - the PDF Oracle", page_icon=":books:", layout="wide"
     )
     st.header(":books: Eric - the PDF Oracle")
-    st.text_input("Ask a question about your documents")
+    user_question = st.text_input("Ask a question about your documents")
+    if user_question:
+        handle_user_input(user_question)
+
+    st.write(css, unsafe_allow_html=True)
+    if "conversation" not in st.session_state:
+        st.session_state.conversation = None
+
+    st.write(user_template.replace("{{MSG}}", "Hello robot"), unsafe_allow_html=True)
+    st.write(bot_template.replace("{{MSG}}", "Hello human"), unsafe_allow_html=True)
 
     with st.sidebar:
         st.subheader("Your documents")
@@ -63,6 +97,11 @@ def main():
 
                 # Create vector store
                 vectorstore = get_vectorstore(text_chunks)
+
+                # Create conversation chain
+                st.session_state.conversation = get_conversation_chain(vectorstore)
+
+        # st.session_state.conversation
 
 
 if __name__ == "__main__":

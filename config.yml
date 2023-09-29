@@ -1,1 +1,2 @@
 embedding: "openai" # Options: openai, instructor
+model: "huggingface" # Options: huggingface, openai
